@@ -155,8 +155,10 @@ export class Engine {
   constructor(cells, gearTable) {
     // cells: { 'A1': {f: 'B1+1'} | {v: 3.5} }
     this.cells = {};
+    this.orig = {};
     for (const [k, e] of Object.entries(cells)) {
       this.cells[k] = { ...e };
+      this.orig[k] = { ...e };
     }
     this.gearTable = gearTable; // [[A,B,C,D],...]
     this.gearRatios = gearTable.map(([a, b, c, d]) => (d ? (a / b) * (c / d) : new ExcelError('#DIV/0!')));
@@ -169,6 +171,21 @@ export class Engine {
     coord = coord.toUpperCase();
     this.cells[coord] = { v: value };
     this.valueCache.clear();
+  }
+
+  // Hücreyi Excel'deki özgün haline (formülüne) döndürür
+  reset(coord) {
+    coord = coord.toUpperCase();
+    if (this.orig[coord]) this.cells[coord] = { ...this.orig[coord] };
+    else delete this.cells[coord];
+    this.valueCache.clear();
+  }
+
+  // Formüllü hücrenin üzerine elle değer yazılmış mı?
+  isOverridden(coord) {
+    coord = coord.toUpperCase();
+    const o = this.orig[coord], c = this.cells[coord];
+    return !!(o && 'f' in o && c && !('f' in c));
   }
 
   getRaw(coord) { return this.cells[coord.toUpperCase()]; }

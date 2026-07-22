@@ -212,6 +212,47 @@ function renderCark() {
       resultRow('Derece Hatası (ondalık)', eng.value(variant.derece), { dec: 6 }),
       resultRow('Derece Hatası', eng.value(variant.dms), { big: true }));
 
+    // W ölçüsü — n elle değiştirilebilir, W girilen n'e göre hesaplanır
+    const w = variant.wOlcusu;
+    const nField = (nCell, wCell, nLabel, wLabel) => {
+      const nVal = eng.value(nCell);
+      const input = el('input', {
+        type: 'text', inputmode: 'numeric',
+        value: typeof nVal === 'number' ? String(nVal) : '',
+        oninput: (e) => {
+          const n = parseInput(e.target.value);
+          if (n !== null) { eng.set(nCell, Math.trunc(n)); draw(); }
+        },
+      });
+      const otoBtn = el('button', {
+        class: 'btn ghost',
+        title: 'Formüldeki otomatik değere dön',
+        onclick: () => { eng.reset(nCell); draw(); },
+      }, 'Oto');
+      const row = el('div', { class: 'save-row', style: 'margin-bottom:16px' },
+        el('div', { class: 'field' },
+          el('label', {}, nLabel + (eng.isOverridden(nCell) ? ' (elle)' : ' (oto)')), input),
+        otoBtn);
+      return el('div', {}, row,
+        resultRow(wLabel, eng.value(wCell), { big: true, dec: 4 }));
+    };
+    const wBox = el('div', { class: 'results' },
+      el('h3', { class: 'label-caps' }, 'W ölçüsü (n seçilebilir)'),
+      nField(w.n1, w.w1, 'n1', 'W1'),
+      nField(w.n2, w.w2, 'n2', 'W2'),
+      el('p', { class: 'note' }, 'n değerini değiştirince W ona göre hesaplanır; "Oto" formüldeki değere döndürür.'));
+
+    // Eksenler arası mesafe — iki dişli birlikte
+    const x = variant.eksen;
+    const eksenBox = el('div', { class: 'results' },
+      el('h3', { class: 'label-caps' }, 'Eksenler arası mesafe'),
+      resultRow('do1 (dişli 1 bölüm dairesi)', eng.value(x.do1), { dec: 4 }),
+      resultRow('do2 (dişli 2 bölüm dairesi)', eng.value(x.do2), { dec: 4 }),
+      resultRow('av — eksenler arası (girilen da ile)', eng.value(x.av), { big: true, dec: 4 }),
+      resultRow('Ao — eksenler arası (hesaplanan da ile)', eng.value(x.ao), { dec: 4 }),
+      el('p', { class: 'note' },
+        'Karşı dişliyi yukarıdaki Z2 ve da2 alanlarına gir; iki dişlinin bölüm daireleri ve eksenler arası mesafe burada birlikte görünür.'));
+
     // Manuel çark denemesi
     const manual = el('div', { class: 'results' },
       el('h3', { class: 'label-caps' }, 'Kendi çarklarını dene'));
@@ -234,7 +275,9 @@ function renderCark() {
       el('summary', {}, 'Geometri ayrıntıları'), cols);
 
     const saveCells = [...variant.inputs.map(d => d.cell), ...variant.manualGears];
-    results.replaceChildren(gearsBox, res, precisionSearch(variant), manual, geo,
+    // elle değiştirilen n değerleri de kayda girsin
+    for (const c of [w.n1, w.n2]) if (eng.isOverridden(c)) saveCells.push(c);
+    results.replaceChildren(gearsBox, res, eksenBox, wBox, precisionSearch(variant), manual, geo,
       saveSection('cark', 'Çark Hesabı · ' + variant.title, saveCells, variant.id));
   };
 
