@@ -1,10 +1,14 @@
 // Modül tanımları — arayüz alanlarının yeni.xlsx hücre eşlemeleri
 // in: giriş hücreleri (kullanıcı yazar), out: sonuç hücreleri (motor hesaplar)
 
+// store: hangi hücre setinde çalışır — 'xlsx' (yeni.xlsx), 'copy' (xlsx'in bağımsız
+// kopyası, Yeni Makine), 'n2026' (2026 OCAK.numbers)
 export const CARK_VARIANTS = [
   {
     id: 'azdirma',
-    title: 'Azdırma (Staehely)',
+    store: 'n2026',
+    title: 'Staehely Azdırma',
+    subtitle: 'STAEHELY 650/8',
     inputs: [
       { cell: 'E10', label: 'mn', unit: 'modül' },
       { cell: 'E11', label: 'Bo', unit: '°' },
@@ -17,7 +21,7 @@ export const CARK_VARIANTS = [
     ],
     isOrani: 'D5', tersOran: 'B5',
     gears: ['A7', 'B7', 'C7', 'D7'],
-    carkOrani: 'C8', hata: 'C9', derece: 'D4', dms: 'G17',
+    carkOrani: 'C8', hata: 'C9', derece: 'D4', dms: 'G18',
     manualGears: ['E7', 'F7', 'G7', 'H7'],
     manualOran: 'G8', manualHata: 'G9', manualDerece: 'E4', manualDms: 'H17',
     wOlcusu: { n1: 'C14', w1: 'C13', n2: 'G14', w2: 'G13' },
@@ -28,11 +32,43 @@ export const CARK_VARIANTS = [
       ['Bw', 'C17'], ['asb', 'C19'], ['aso', 'C20'], ['evao', 'C21'], ['evasb', 'C22'],
       ['sno', 'C23'], ['tso1', 'C25'], ['sso1', 'C26'], ['tso2', 'C27'], ['sao2', 'C28'],
       ['ax2', 'C29'], ['ax1', 'C30'], ['sg', 'F29'], ['tg', 'F30'],
-      ['i (Z2/Z1)', 'F24'], ['Devir', 'F33'],
+      ['H1', 'F31'], ['H2', 'F32'], ['i (Z2/Z1)', 'F24'], ['Devir', 'F33'],
+    ],
+  },
+  {
+    id: 'yeniazdirma',
+    store: 'n2026',
+    title: 'Yeni Azdırma',
+    subtitle: 'WMW MODUL 250 ÇAP',
+    inputs: [
+      { cell: 'E59', label: 'mn', unit: 'modül' },
+      { cell: 'E60', label: 'Bo', unit: '°' },
+      { cell: 'E61', label: 'ℓno', unit: '°' },
+      { cell: 'E62', label: 'G', unit: '' },
+      { cell: 'C60', label: 'Z1', unit: 'diş' },
+      { cell: 'G60', label: 'Z2', unit: 'diş' },
+      { cell: 'C61', label: 'da1', unit: 'mm' },
+      { cell: 'G61', label: 'da2', unit: 'mm' },
+    ],
+    isOrani: 'D54', tersOran: 'B54',
+    gears: ['A56', 'B56', 'C56', 'D56'],
+    carkOrani: 'C57', hata: 'C58', derece: 'D53', dms: 'G67',
+    manualGears: ['E56', 'F56', 'G56', 'H56'],
+    manualOran: 'G57', manualHata: 'G58', manualDerece: 'E53', manualDms: 'H66',
+    wOlcusu: { n1: 'C63', w1: 'C62', n2: 'G63', w2: 'G62' },
+    eksen: { do1: 'C64', do2: 'G64', av: 'E64', ao: 'E65' },
+    geometry: [
+      ['X1', 'F66'], ['X2', 'F67'], ['da1', 'F68'], ['da2', 'F69'],
+      ['do1', 'F70'], ['do2', 'F71'], ['dg1', 'F72'], ["Z'1", 'F77'], ["Z'2", 'F76'],
+      ['Bw', 'C66'], ['asb', 'C68'], ['aso', 'C69'], ['evao', 'C70'], ['evasb', 'C71'],
+      ['sno', 'C72'], ['tso1', 'C74'], ['sso1', 'C75'], ['tso2', 'C76'], ['sao2', 'C77'],
+      ['ax2', 'C78'], ['ax1', 'C79'], ['sg', 'F78'], ['tg', 'F79'],
+      ['H1', 'F80'], ['H2', 'F81'], ['i (Z2/Z1)', 'F73'], ['Devir', 'F82'],
     ],
   },
   {
     id: 'kucuk',
+    store: 'xlsx',
     title: 'Küçük Makine',
     inputs: [
       { cell: 'E59', label: 'mn', unit: 'modül' },
@@ -60,6 +96,7 @@ export const CARK_VARIANTS = [
   },
   {
     id: 'buyuk',
+    store: 'xlsx',
     title: 'Büyük Makine',
     inputs: [
       { cell: 'E96', label: 'mn', unit: 'modül' },
@@ -86,6 +123,14 @@ export const CARK_VARIANTS = [
     ],
   },
 ];
+
+// Yeni Makine: Büyük Makine hesabının bağımsız kopyası (kendi girdileriyle)
+const buyukTanim = CARK_VARIANTS.find(v => v.id === 'buyuk');
+CARK_VARIANTS.push({ ...buyukTanim, id: 'yenimakine', store: 'copy', title: 'Yeni Makine', subtitle: 'Büyük makine hesabının kopyası' });
+
+// Sekme sırası: Yeni Makine · Küçük · Büyük · Staehely Azdırma · Yeni Azdırma
+const SIRA = { yenimakine: 1, kucuk: 2, buyuk: 3, azdirma: 4, yeniazdirma: 5 };
+CARK_VARIANTS.sort((a, b) => SIRA[a.id] - SIRA[b.id]);
 
 export const MODULES = {
   modul: {
@@ -138,7 +183,7 @@ export const MODULES = {
     outputs: [
       { cell: 'E45', label: 'Diş oranı', dec: 8 },
       { cell: 'E46', label: 'Çark oranı', dec: 8 },
-      { cell: 'E47', label: 'Hata', dec: 8, errIfNonZero: true },
+      { cell: 'E47', label: 'Hata', sci: true, errIfNonZero: true },
     ],
   },
   konik: {
@@ -168,7 +213,7 @@ export const MODULES = {
 };
 
 export const HOME_ITEMS = [
-  { route: 'cark', title: 'Çark Hesabı', desc: 'Azdırma · Küçük Makine · Büyük Makine' },
+  { route: 'cark', title: 'Çark Hesabı', desc: 'Yeni Makine · Küçük · Büyük · Staehely · Yeni Azdırma' },
   { route: 'modul', title: 'Modül Hesabı', desc: 'w1/w2 ölçümünden mn ve DP' },
   { route: 'derece', title: 'Derece Hatası', desc: 'Kalite kontrol sonrası' },
   { route: 'malzeme', title: 'Malzeme Ağırlık / Maliyet', desc: 'Ø ve boydan kg ve tutar' },

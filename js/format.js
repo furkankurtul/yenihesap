@@ -15,6 +15,19 @@ export function fmt(v, decimals = 6) {
   return String(v);
 }
 
+// Hata değerleri için bilimsel gösterim: 0,0000445 -> "4,45·10⁻⁵"
+const SUPER = { '-': '⁻', '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
+export function fmtSci(v) {
+  if (v instanceof ExcelError) return '—';
+  if (typeof v !== 'number' || !Number.isFinite(v)) return '—';
+  if (v === 0) return '0';
+  const exp = Math.floor(Math.log10(Math.abs(v)));
+  const mant = v / Math.pow(10, exp);
+  const mantStr = mant.toFixed(2).replace(/0+$/, '').replace(/\.$/, '').replace('.', ',');
+  const expStr = String(exp).split('').map(ch => SUPER[ch] || ch).join('');
+  return `${mantStr}·10${expStr}`;
+}
+
 // Girdi kutusundan sayı oku (virgül de kabul et)
 export function parseInput(str) {
   if (str === null || str === undefined) return null;

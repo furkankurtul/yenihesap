@@ -127,6 +127,11 @@ function r15(x) {
     ? parseFloat(x.toPrecision(15))
     : x;
 }
+function r14(x) {
+  return typeof x === 'number' && Number.isFinite(x) && x !== 0
+    ? parseFloat(x.toPrecision(14))
+    : x;
+}
 
 function toNumber(v) {
   if (v instanceof ExcelError) return v;
@@ -152,7 +157,11 @@ export function excelText(v) {
 
 // ---------- Motor ----------
 export class Engine {
-  constructor(cells, gearTable) {
+  constructor(cells, gearTable, opts = {}) {
+    // vlookupMode: 'binary' = Excel ikili arama; 'scan' = Numbers (≤ anahtar en büyük değer)
+    this.vlookupMode = opts.vlookupMode || 'binary';
+    // round15: Numbers gibi toplama/çıkarmada da 15 basamağa yuvarla
+    this.round15 = !!opts.round15;
     // cells: { 'A1': {f: 'B1+1'} | {v: 3.5} }
     this.cells = {};
     this.orig = {};
@@ -261,8 +270,9 @@ export class Engine {
     if (a instanceof ExcelError) return a;
     if (b instanceof ExcelError) return b;
     switch (op) {
-      case '+': return a + b;
-      case '-': return a - b;
+      // Numbers modu: toplama/çıkarmada 14 basamağa yuvarla (Numbers 32.4-32 = tam 0.4 verir)
+      case '+': return this.round15 ? r14(a + b) : a + b;
+      case '-': return this.round15 ? r14(a - b) : a - b;
       case '*': return r15(a * b);
       case '/': return b === 0 ? new ExcelError('#DIV/0!') : r15(a / b);
       case '^': return r15(Math.pow(a, b));
@@ -330,6 +340,29 @@ export class Engine {
         while (y) { [x, y] = [y, x % y]; }
         return x;
       }
+      case 'SUM': {
+        let total = 0;
+        for (const a of n.args) {
+          const v = this.evalNode(a);
+          if (v instanceof ExcelError) return v;
+          if (v && v.range) {
+            const m = String(v.range).match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+            if (!m) return new ExcelError('#REF!');
+            const [, c1, r1, c2, r2] = m;
+            const colIdx = (s) => s.split('').reduce((acc, ch) => acc * 26 + ch.charCodeAt(0) - 64, 0);
+            const colStr = (i) => { let s = ''; while (i) { const r = (i - 1) % 26; s = String.fromCharCode(65 + r) + s; i = (i - 1 - r) / 26; } return s; };
+            for (let ci = colIdx(c1); ci <= colIdx(c2); ci++) {
+              for (let ri = +r1; ri <= +r2; ri++) {
+                const cv = this.value(colStr(ci) + ri);
+                if (cv instanceof ExcelError) return cv;
+                if (typeof cv === 'number') total += cv;
+              }
+            }
+          } else if (typeof v === 'number') total += v;
+          else if (typeof v === 'boolean') total += v ? 1 : 0;
+        }
+        return this.round15 ? r15(total) : total;
+      }
       case 'VLOOKUP': return this.vlookup(n);
       default: throw new Error('Desteklenmeyen fonksiyon: ' + F);
     }
@@ -341,21 +374,34 @@ export class Engine {
     if (key instanceof ExcelError) return key;
     const rangeV = this.evalNode(n.args[1]);
     const colV = this.evalNode(n.args[2]);
-    if (!rangeV || !rangeV.range || !String(rangeV.range).startsWith('BH')) {
+    // Çark oranı tablosu: xlsx'te BH:BL, Numbers'ta P:T — ikisi de aynı tablo
+    const rng = rangeV && rangeV.range ? String(rangeV.range) : '';
+    if (!rng.startsWith('BH') && !rng.startsWith('P')) {
       return new ExcelError('#REF!');
     }
     const col = toNumber(colV); // 1=oran, 2=A, 3=B, 4=C, 5=D
     const k = toNumber(key);
     if (k instanceof ExcelError || col instanceof ExcelError) return new ExcelError('#VALUE!');
     const ratios = this.gearRatios;
-    // Excel VLOOKUP(TRUE): sıralı varsayımla ikili arama, k'den küçük-eşit son satır
-    let lo = 0, hi = ratios.length - 1, found = -1;
-    while (lo <= hi) {
-      const mid = (lo + hi) >> 1;
-      const rv = ratios[mid];
-      const rnum = rv instanceof ExcelError ? Infinity : rv;
-      if (rnum <= k) { found = mid; lo = mid + 1; }
-      else { hi = mid - 1; }
+    let found = -1;
+    if (this.vlookupMode === 'scan') {
+      // Numbers VLOOKUP(yaklaşık): sıradan bağımsız, anahtardan küçük-eşit EN BÜYÜK değer
+      let best = -Infinity;
+      for (let i = 0; i < ratios.length; i++) {
+        const rv = ratios[i];
+        if (rv instanceof ExcelError) continue;
+        if (rv <= k && rv >= best) { best = rv; found = i; }
+      }
+    } else {
+      // Excel VLOOKUP(TRUE): sıralı varsayımla ikili arama, k'den küçük-eşit son satır
+      let lo = 0, hi = ratios.length - 1;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        const rv = ratios[mid];
+        const rnum = rv instanceof ExcelError ? Infinity : rv;
+        if (rnum <= k) { found = mid; lo = mid + 1; }
+        else { hi = mid - 1; }
+      }
     }
     if (found < 0) return new ExcelError('#N/A');
     if (col === 1) return ratios[found];

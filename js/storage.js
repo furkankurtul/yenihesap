@@ -14,7 +14,7 @@ function persist(jobs) {
   localStorage.setItem(KEY, JSON.stringify(jobs));
 }
 
-export function saveJob({ name, route, moduleTitle, variant, inputs }) {
+export function saveJob({ name, route, moduleTitle, variant, inputs, note }) {
   const jobs = listJobs();
   const job = {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
@@ -24,6 +24,7 @@ export function saveJob({ name, route, moduleTitle, variant, inputs }) {
     moduleTitle,
     variant: variant || null,
     inputs, // { hücre: değer }
+    note: note || null,
   };
   const next = [job, ...jobs];
   persist(next);
