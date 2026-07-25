@@ -7,7 +7,7 @@ import { ZST } from '../data/zst.js';
 import { fmt, fmtSci, parseInput } from './format.js';
 import { CARK_VARIANTS, MODULES, HOME_ITEMS } from './modules.js';
 import { findGears } from './optimizer.js';
-import { listJobs, saveJob, deleteJob } from './storage.js';
+import { listJobs, saveJob, deleteJob, exportJobs, importJobs } from './storage.js';
 
 // Üç hücre deposu: xlsx (yeni.xlsx), copy (Yeni Makine için bağımsız kopya),
 // n2026 (2026 OCAK.numbers — Numbers'ın VLOOKUP/yuvarlama davranışıyla)
@@ -65,8 +65,9 @@ function foldSection(title, ...children) {
 // ---------- iş kaydı (yalnız Çark Hesabı) ----------
 function saveSection(variant, E, cellsToSave) {
   const msg = el('span', { class: 'save-msg' });
+  const firmaInput = el('input', { type: 'text', placeholder: 'Firma adı' });
   const nameInput = el('input', { type: 'text', placeholder: 'İş adı (örn: 71 diş helis)' });
-  const noteInput = el('textarea', { rows: '3', placeholder: 'Not (opsiyonel) — malzeme, müşteri, ölçü notu…' });
+  const noteInput = el('textarea', { rows: '3', placeholder: 'Not (opsiyonel) — malzeme, ölçü, teslim notu…' });
   const btn = el('button', {
     class: 'btn',
     onclick: () => {
@@ -76,11 +77,18 @@ function saveSection(variant, E, cellsToSave) {
         const v = E.value(cell);
         if (typeof v === 'number') inputs[cell] = v;
       }
+      const zCell = variant.inputs.find(d => d.label === 'Z1')?.cell;
+      const z2Cell = variant.inputs.find(d => d.label === 'Z2')?.cell;
+      const mnCell = variant.inputs.find(d => d.label === 'mn')?.cell;
       saveJob({
-        name: nameInput.value, route: 'cark',
+        name: nameInput.value, firma: firmaInput.value, route: 'cark',
         moduleTitle: 'Çark Hesabı · ' + variant.title,
-        variant: variant.id, inputs,
-        note: noteInput.value.trim() || null,
+        makine: variant.title, variant: variant.id, inputs,
+        z1: zCell ? E.value(zCell) : null,
+        z2: z2Cell ? E.value(z2Cell) : null,
+        mn: mnCell ? E.value(mnCell) : null,
+        carklar: variant.gears.map(c => E.value(c)).join(' · '),
+        note: noteInput.value,
       });
       msg.textContent = 'Kaydedildi ✓';
       nameInput.value = ''; noteInput.value = '';
@@ -89,51 +97,145 @@ function saveSection(variant, E, cellsToSave) {
   }, 'Kaydet');
   return el('div', { class: 'results' },
     el('h3', { class: 'label-caps' }, 'İşi kaydet'),
-    el('div', { class: 'save-row' },
-      el('div', { class: 'field' }, el('label', {}, 'İş adı'), nameInput), btn, msg),
-    el('div', { class: 'field', style: 'margin-top:16px' },
-      el('label', {}, 'Not ', el('span', { class: 'unit' }, 'opsiyonel')), noteInput));
+    el('div', { class: 'form-grid' },
+      el('div', { class: 'field' }, el('label', {}, 'Firma ', el('span', { class: 'unit' }, 'opsiyonel')), firmaInput),
+      el('div', { class: 'field' }, el('label', {}, 'İş adı'), nameInput)),
+    el('div', { class: 'field', style: 'margin-bottom:16px' },
+      el('label', {}, 'Not ', el('span', { class: 'unit' }, 'opsiyonel')), noteInput),
+    el('div', { class: 'save-row' }, btn, msg));
 }
+
+// ---------- Kayıtlı İşler: tek tablo, filtreli ----------
+const jobFilters = { q: '', firma: '', makine: '', z: '' };
 
 function renderJobs() {
   titleEl.textContent = 'Kayıtlı İşler';
   const jobs = listJobs();
-  const wrap = el('div');
-  if (!jobs.length) {
-    wrap.append(el('p', { class: 'note' },
-      'Henüz kayıtlı iş yok. Çark Hesabı ekranının altındaki "İşi kaydet" bölümünü kullan.'));
-  }
-  for (const job of jobs) {
-    const date = new Date(job.ts).toLocaleString('tr-TR', { dateStyle: 'medium', timeStyle: 'short' });
-    const meta = el('div', { class: 'meta' }, `${job.moduleTitle} — ${date}`);
-    const row = el('div', { class: 'job-row' },
-      el('div', {},
-        el('div', { class: 'name' }, job.name),
-        meta,
-        job.note ? el('div', { class: 'meta' }, '🗒 ' + job.note) : null),
-      el('div', { class: 'actions' },
-        el('button', {
-          class: 'btn ghost',
-          onclick: () => {
-            const variant = CARK_VARIANTS.find(v => v.id === job.variant);
-            const E = variant ? STORES[variant.store] : eng;
-            for (const [cell, v] of Object.entries(job.inputs)) E.set(cell, v);
-            if (job.variant && variant) activeVariant = job.variant;
-            location.hash = '#' + job.route;
-            if (('#' + job.route) === location.hash) route();
-          },
-        }, 'Aç'),
-        el('button', {
-          class: 'btn danger',
-          onclick: () => { deleteJob(job.id); renderJobs(); },
-        }, 'Sil')));
-    wrap.append(row);
-  }
+
+  const tableWrap = el('div', { class: 'table-scroll' });
+  const info = el('p', { class: 'note' });
+
+  const openJob = (job) => {
+    const variant = CARK_VARIANTS.find(v => v.id === job.variant);
+    const E = variant ? STORES[variant.store] : eng;
+    for (const [cell, v] of Object.entries(job.inputs || {})) E.set(cell, v);
+    if (variant) activeVariant = job.variant;
+    if (location.hash === '#' + job.route) route(); else location.hash = '#' + job.route;
+  };
+
+  const draw = () => {
+    const q = jobFilters.q.toLocaleLowerCase('tr');
+    const zNum = parseInput(jobFilters.z);
+    const list = jobs.filter(j => {
+      if (jobFilters.firma && (j.firma || '') !== jobFilters.firma) return false;
+      if (jobFilters.makine && (j.makine || j.moduleTitle || '') !== jobFilters.makine) return false;
+      if (zNum !== null && Number(j.z1) !== zNum && Number(j.z2) !== zNum) return false;
+      if (!q) return true;
+      return [j.name, j.firma, j.makine, j.note, j.carklar, j.z1, j.z2, j.mn]
+        .filter(v => v !== null && v !== undefined)
+        .join(' ').toLocaleLowerCase('tr').includes(q);
+    });
+
+    const table = el('table', { class: 'data jobs' });
+    table.append(el('thead', {}, el('tr', {},
+      el('th', {}, 'Tarih'), el('th', {}, 'Firma'), el('th', {}, 'İş adı'),
+      el('th', {}, 'Makine'), el('th', {}, 'Z1'), el('th', {}, 'Z2'), el('th', {}, 'mn'),
+      el('th', {}, 'Çarklar'), el('th', {}, 'Not'), el('th', {}, ''))));
+    const tbody = el('tbody');
+    for (const j of list) {
+      const date = new Date(j.ts).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+      tbody.append(el('tr', {},
+        el('td', {}, date),
+        el('td', {}, j.firma || '—'),
+        el('td', { class: 'strong' }, j.name),
+        el('td', {}, j.makine || (j.moduleTitle || '').replace('Çark Hesabı · ', '')),
+        el('td', {}, j.z1 != null ? fmt(j.z1, 0) : '—'),
+        el('td', {}, j.z2 != null ? fmt(j.z2, 0) : '—'),
+        el('td', {}, j.mn != null ? fmt(j.mn, 3) : '—'),
+        el('td', {}, j.carklar || '—'),
+        el('td', { class: 'note-cell', title: j.note || '' }, j.note || '—'),
+        el('td', { class: 'nowrap' },
+          el('button', { class: 'btn ghost sm', onclick: () => openJob(j) }, 'Aç'),
+          el('button', {
+            class: 'btn danger sm',
+            onclick: () => { if (confirm(`"${j.name}" silinsin mi?`)) { deleteJob(j.id); renderJobs(); } },
+          }, 'Sil'))));
+    }
+    table.append(tbody);
+    tableWrap.replaceChildren(table);
+    info.textContent = `${list.length} / ${jobs.length} iş gösteriliyor.`;
+  };
+
+  // Filtre çubuğu
+  const uniq = (fn) => [...new Set(jobs.map(fn).filter(Boolean))].sort();
+  const select = (label, key, values) => {
+    const sel = el('select', {
+      onchange: (e) => { jobFilters[key] = e.target.value; draw(); },
+    }, el('option', { value: '' }, 'Tümü'));
+    for (const v of values) {
+      const opt = el('option', { value: v }, v);
+      if (jobFilters[key] === v) opt.setAttribute('selected', 'selected');
+      sel.append(opt);
+    }
+    return el('div', { class: 'field' }, el('label', {}, label), sel);
+  };
+  const searchInput = el('input', {
+    type: 'search', placeholder: 'İş adı, firma, not, çark…', value: jobFilters.q,
+    oninput: (e) => { jobFilters.q = e.target.value; draw(); },
+  });
+  const zInput = el('input', {
+    type: 'text', inputmode: 'numeric', placeholder: 'Z1 veya Z2', value: jobFilters.z,
+    oninput: (e) => { jobFilters.z = e.target.value; draw(); },
+  });
+  const filters = el('div', { class: 'filter-bar' },
+    el('div', { class: 'field grow' }, el('label', {}, 'Ara'), searchInput),
+    select('Firma', 'firma', uniq(j => j.firma)),
+    select('Makine', 'makine', uniq(j => j.makine || (j.moduleTitle || '').replace('Çark Hesabı · ', ''))),
+    el('div', { class: 'field' }, el('label', {}, 'Diş sayısı'), zInput),
+    el('button', {
+      class: 'btn ghost',
+      onclick: () => { jobFilters.q = jobFilters.firma = jobFilters.makine = jobFilters.z = ''; renderJobs(); },
+    }, 'Temizle'));
+
+  // Yedekleme: JSON indir / dosyadan yükle
+  const fileInput = el('input', {
+    type: 'file', accept: '.json', style: 'display:none',
+    onchange: async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const r = importJobs(await file.text());
+        alert(`${r.eklenen} iş eklendi, ${r.atlanan} zaten kayıtlıydı.`);
+        renderJobs();
+      } catch (err) {
+        alert('Dosya okunamadı: ' + err.message);
+      }
+      e.target.value = '';
+    },
+  });
+  const backup = el('div', { class: 'save-row', style: 'margin-top:24px' },
+    el('button', {
+      class: 'btn',
+      onclick: () => {
+        const blob = new Blob([exportJobs()], { type: 'application/json' });
+        const a = el('a', {
+          href: URL.createObjectURL(blob),
+          download: `isler-${new Date().toISOString().slice(0, 10)}.json`,
+        });
+        a.click();
+        URL.revokeObjectURL(a.href);
+      },
+    }, 'Yedeği indir'),
+    el('button', { class: 'btn ghost', onclick: () => fileInput.click() }, 'Yedekten yükle'),
+    fileInput);
+
   app.replaceChildren(
-    el('p', { class: 'label-caps' }, 'Yerel kayıtlar'),
+    el('p', { class: 'label-caps' }, 'Kayıtlar'),
     el('h2', { class: 'page-title' }, 'Kayıtlı İşler'),
-    wrap,
-    el('p', { class: 'note' }, 'Kayıtlar bu tarayıcıda saklanır; başka cihazdan görünmez.'));
+    filters, tableWrap, info, backup,
+    el('p', { class: 'note' },
+      'Kayıtlar bu cihazın tarayıcısında tutulur. Kalıcı saklamak için "Yedeği indir" ile dosyayı alıp depodaki kayitlar/ klasörüne koy; başka cihazda "Yedekten yükle" ile geri getir.'));
+  draw();
 }
 
 // ---------- ekranlar ----------
