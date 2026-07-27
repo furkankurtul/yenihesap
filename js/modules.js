@@ -221,5 +221,6 @@ export const HOME_ITEMS = [
   { route: 'taksimat', title: 'Taksimat Hesabı', desc: 'Sabit sayı ve çark seçimi' },
   { route: 'konik', title: 'Konik Hesabı', desc: 'Çaplardan konik derecesi' },
   { route: 'bicak', title: 'Bıçak Derece Hesabı', desc: 'Azdırma bıçağı BWo' },
+  { route: 'acicevir', title: 'Açı Çevirici', desc: 'D° M′ S″ → ondalık derece' },
   { route: 'kayitlar', title: 'Kayıtlı İşler', desc: 'Kaydedilen hesapları aç veya sil' },
 ];

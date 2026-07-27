@@ -4,7 +4,7 @@ import { CELLS } from '../data/cells.js';
 import { CELLS_2026 } from '../data/cells2026.js';
 import { GEAR_TABLE } from '../data/gears.js';
 import { ZST } from '../data/zst.js';
-import { fmt, fmtSci, parseInput } from './format.js';
+import { fmt, fmtSci, parseInput, decToDms, dmsToDec } from './format.js';
 import { CARK_VARIANTS, MODULES, HOME_ITEMS } from './modules.js';
 import { findGears } from './optimizer.js';
 import { listJobs, saveJob, deleteJob, exportJobs, importJobs } from './storage.js';
@@ -37,6 +37,7 @@ function el(tag, attrs = {}, ...children) {
 }
 
 function inputField(E, def, onChange) {
+  if (def.unit === '°') return angleField(E, def, onChange);
   const cur = E.value(def.cell);
   const input = el('input', {
     type: 'text', inputmode: 'decimal',
@@ -49,6 +50,36 @@ function inputField(E, def, onChange) {
   const label = el('label', {}, def.label + ' ');
   if (def.unit) label.append(el('span', { class: 'unit' }, def.unit));
   return el('div', { class: 'field' }, label, input);
+}
+
+// Açı girişi — tek ondalık kutusu yerine derece / dakika / saniye
+function angleField(E, def, onChange) {
+  const dms = decToDms(E.value(def.cell));
+  const update = () => {
+    const d = parseInput(dInput.value) ?? 0;
+    const m = parseInput(mInput.value) ?? 0;
+    const s = parseInput(sInput.value) ?? 0;
+    E.set(def.cell, dmsToDec(d, m, s));
+    onChange();
+  };
+  const dInput = el('input', {
+    type: 'text', inputmode: 'numeric', class: 'angle-part',
+    value: dms.d === '' ? '' : String(dms.d), oninput: update,
+  });
+  const mInput = el('input', {
+    type: 'text', inputmode: 'numeric', class: 'angle-part',
+    value: dms.m === '' ? '' : String(dms.m), oninput: update,
+  });
+  const sInput = el('input', {
+    type: 'text', inputmode: 'decimal', class: 'angle-part',
+    value: dms.s === '' ? '' : String(dms.s).replace('.', ','), oninput: update,
+  });
+  const label = el('label', {}, def.label + ' ');
+  return el('div', { class: 'field' }, label,
+    el('div', { class: 'angle-inputs' },
+      dInput, el('span', { class: 'unit' }, '°'),
+      mInput, el('span', { class: 'unit' }, "'"),
+      sInput, el('span', { class: 'unit' }, '″')));
 }
 
 function resultRow(name, value, { big = false, dec = 6, err = false, sci = false } = {}) {
@@ -428,6 +459,23 @@ function renderSimple(key) {
   draw();
 }
 
+// ---------- Açı Çevirici: D° M′ S″ → ondalık derece (motora bağlı değil) ----------
+function renderAngleConverter() {
+  titleEl.textContent = 'Açı Çevirici';
+  const state = { value: 0 };
+  const fakeE = { value: () => state.value, set: (_cell, v) => { state.value = v; } };
+  const results = el('div', { class: 'results' });
+  const draw = () => {
+    results.replaceChildren(
+      el('h3', { class: 'label-caps' }, 'Sonuç'),
+      resultRow('Ondalık derece', state.value, { big: true, dec: 6 }));
+  };
+  const grid = el('div', { class: 'form-grid' },
+    angleField(fakeE, { cell: 'giris', label: 'Açı' }, draw));
+  app.replaceChildren(el('p', { class: 'label-caps' }, 'Parametre girişi'), grid, results);
+  draw();
+}
+
 let zstTab = 'tablo1';
 let zstQuery = '';
 
@@ -474,6 +522,7 @@ function route() {
   if (hash === 'home' || hash === '') renderHome();
   else if (hash === 'cark') renderCark();
   else if (hash === 'zst') renderZst();
+  else if (hash === 'acicevir') renderAngleConverter();
   else if (hash === 'kayitlar') renderJobs();
   else if (MODULES[hash]) renderSimple(hash);
   else renderHome();

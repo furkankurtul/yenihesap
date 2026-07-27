@@ -144,6 +144,9 @@ h2.page-title {
   border-radius: 0;
 }
 .field input:focus { outline: none; border-color: var(--primary); }
+.angle-inputs { display: flex; align-items: center; gap: 6px; }
+.angle-inputs .angle-part { width: 100%; min-width: 0; text-align: right; }
+.angle-inputs .unit { flex: none; color: var(--outline); font-size: 13px; }
 
 /* ---- Sonuçlar ---- */
 .results { border-top: 1px solid var(--outline); padding-top: 24px; margin-bottom: 32px; }

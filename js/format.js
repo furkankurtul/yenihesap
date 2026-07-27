@@ -36,3 +36,19 @@ export function parseInput(str) {
   const n = parseFloat(s);
   return Number.isNaN(n) ? null : n;
 }
+
+// Ondalık dereceyi derece/dakika/saniyeye ayır (Excel'deki TRUNC tabanlı
+// DMS gösterimiyle aynı yaklaşım — G20/G23/G26 formülleri)
+export function decToDms(v) {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return { d: '', m: '', s: '' };
+  const d = Math.trunc(v);
+  const mFull = (v - d) * 60;
+  const m = Math.trunc(mFull);
+  const s = Math.round((mFull - m) * 60 * 100) / 100;
+  return { d, m, s };
+}
+
+// Derece/dakika/saniyeyi ondalık dereceye çevir
+export function dmsToDec(d, m, s) {
+  return d + m / 60 + s / 3600;
+}
