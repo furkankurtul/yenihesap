@@ -459,21 +459,54 @@ function renderSimple(key) {
   draw();
 }
 
-// ---------- Açı Çevirici: D° M′ S″ → ondalık derece (motora bağlı değil) ----------
+// ---------- Açı Çevirici: D° M′ S″ ⇄ ondalık derece (motora bağlı değil) ----------
+let angleConvMode = 'toDec'; // 'toDec': DMS → ondalık, 'toDms': ondalık → DMS
+
 function renderAngleConverter() {
   titleEl.textContent = 'Açı Çevirici';
-  const state = { value: 0 };
-  const fakeE = { value: () => state.value, set: (_cell, v) => { state.value = v; } };
+
+  const tabs = el('div', { class: 'tabs' },
+    el('button', {
+      class: angleConvMode === 'toDec' ? 'active' : '',
+      onclick: () => { angleConvMode = 'toDec'; renderAngleConverter(); },
+    }, 'DMS → Ondalık'),
+    el('button', {
+      class: angleConvMode === 'toDms' ? 'active' : '',
+      onclick: () => { angleConvMode = 'toDms'; renderAngleConverter(); },
+    }, 'Ondalık → DMS'));
+
   const results = el('div', { class: 'results' });
-  const draw = () => {
-    results.replaceChildren(
-      el('h3', { class: 'label-caps' }, 'Sonuç'),
-      resultRow('Ondalık derece', state.value, { big: true, dec: 6 }));
-  };
-  const grid = el('div', { class: 'form-grid' },
-    angleField(fakeE, { cell: 'giris', label: 'Açı' }, draw));
-  app.replaceChildren(el('p', { class: 'label-caps' }, 'Parametre girişi'), grid, results);
-  draw();
+  const grid = el('div', { class: 'form-grid' });
+
+  if (angleConvMode === 'toDec') {
+    const state = { value: 0 };
+    const fakeE = { value: () => state.value, set: (_cell, v) => { state.value = v; } };
+    const draw = () => {
+      results.replaceChildren(
+        el('h3', { class: 'label-caps' }, 'Sonuç'),
+        resultRow('Ondalık derece', state.value, { big: true, dec: 6 }));
+    };
+    grid.append(angleField(fakeE, { cell: 'giris', label: 'Açı' }, draw));
+    draw();
+  } else {
+    let dec = 0;
+    const draw = () => {
+      const dms = decToDms(dec);
+      const dmsText = `${dms.d}° ${dms.m}′ ${fmt(dms.s, 2)}″`;
+      results.replaceChildren(
+        el('h3', { class: 'label-caps' }, 'Sonuç'),
+        resultRow('D° M′ S″', dmsText, { big: true }));
+    };
+    const input = el('input', {
+      type: 'text', inputmode: 'decimal',
+      oninput: (e) => { dec = parseInput(e.target.value) ?? 0; draw(); },
+    });
+    const label = el('label', {}, 'Ondalık derece ', el('span', { class: 'unit' }, '°'));
+    grid.append(el('div', { class: 'field' }, label, input));
+    draw();
+  }
+
+  app.replaceChildren(tabs, el('p', { class: 'label-caps' }, 'Parametre girişi'), grid, results);
 }
 
 let zstTab = 'tablo1';

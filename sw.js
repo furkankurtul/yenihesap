@@ -1,6 +1,6 @@
 // Dişli Hesap service worker — çevrimdışı çalışma
 // Sürümü artırınca eski önbellek silinir ve dosyalar yeniden indirilir.
-const CACHE = 'disli-hesap-v4';
+const CACHE = 'disli-hesap-v5';
 const ASSETS = [
   './',
   'index.html',
